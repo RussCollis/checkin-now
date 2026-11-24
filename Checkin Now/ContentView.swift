@@ -371,9 +371,13 @@ private struct ActionPanel: View {
                 symbol: "shippingbox"
             )
 
-            Text("Checkin Now \(Bundle.main.shortVersion) · © 2026 Russell Collis")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            VStack(spacing: 2) {
+                Text("Checkin Now \(Bundle.main.shortVersion) · \(Credits.copyright)")
+                Text(Credits.upstream)
+                    .multilineTextAlignment(.center)
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
         }
         .padding(16)
         .background(.bar)

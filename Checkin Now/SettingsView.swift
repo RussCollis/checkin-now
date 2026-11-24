@@ -158,10 +158,20 @@ private struct AboutSettings: View {
             Text("Force Jamf Pro check-ins instantly, by serial number or group.")
                 .multilineTextAlignment(.center)
                 .padding(.top, 4)
-            Text("© 2026 Russell Collis · MIT License")
+            Text(Credits.copyright)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)
+            VStack(spacing: 2) {
+                Text("Agent based on jamf-checkin-watcher by mhrono")
+                Text("© 2021 Buoy Health, Inc. · Apache License 2.0")
+                if let url = Credits.upstreamURL {
+                    Link("github.com/mhrono/jamf-checkin-watcher", destination: url)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.top, 4)
         }
         .padding(32)
         .frame(maxWidth: .infinity)
@@ -190,5 +200,10 @@ struct ScriptDocument: FileDocument {
 #Preview("Agent") {
     AgentSettings()
         .environment(AppModel())
+        .frame(width: 520)
+}
+
+#Preview("About") {
+    AboutSettings()
         .frame(width: 520)
 }
