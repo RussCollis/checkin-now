@@ -4,19 +4,20 @@
 
 A macOS app that forces Jamf Pro–managed Macs to check in immediately, by serial number or computer group, and shows each Mac checking in live.
 
-**Version:** 0.6.9
+**Version:** 0.6.11
 **Owner:** Russell Collis
 
 ## Features
 - Target one or more serial numbers, or any static/smart computer group
 - Lists group members (or looked-up serials) with model, macOS version, last check-in and last inventory
 - One-click actions: **Check In + Update Inventory** (⌘↩), **Check In**, **Update Inventory**, and **Run Policy** (optionally followed by an inventory update)
-- Sidebar progress list with **Wake** (MDM blank push) and **Resend** (trigger only the Macs still waiting)
+- Progress panel with **Wake** (MDM blank push) and **Resend** (trigger only the Macs still waiting)
 - **Diagnose** waiting Macs from their Jamf Pro MDM command history and policy logs: trigger not received yet, Mac online but MDM not responding, MDM queue stuck, deferred (NotNow), failed, agent not installed, or delivered but Jamf hasn't run. Runs automatically after 2 minutes
 - Live results: watches Jamf Pro after triggering and marks each Mac **Waiting → Checked In → Done** (inventory updated)
 - One-click **Set Up in Jamf Pro**: uploads the agent script, creates the install policy, and creates the trigger profile
 - Activity log keeps the last 24 hours across launches, grouped by hour, with an Issues filter, search and copy
 - Open any Mac in Jamf Pro or copy serials from the results table
+- Same look as Patching Dashboard: navy sidebar, breadcrumb top bar with the Jamf Pro server badge, white panels and summary chips, in light and dark mode
 - API Client (OAuth) or user account authentication; secret stored in the Keychain
 
 ## How it works
@@ -53,9 +54,9 @@ jamf-checkin-watcher, so existing installs keep working.
    Macs install the agent at their next check-in. You can also copy or save the script from the **Script** menu.
 
 ## Usage
-1. Choose **Serial Numbers** (then **Look Up**) or **Computer Group**. The **Targets** tab lists the Macs.
+1. Choose **Serial Numbers** (then **Look Up**) or **Computer Group**. The **Targets** page (in the sidebar) lists the Macs.
 2. Click **Check In + Update Inventory** (⌘↩), **Check In**, **Update Inventory**, or choose a policy and click **Run Policy**.
-3. Watch progress in the sidebar and the **Last Run** tab. If a Mac stays on Waiting, its reason appears under it
+3. Watch progress in the **Progress** panel and on the **Last Run** page. If a Mac stays on Waiting, its reason appears under it
    (or click **Diagnose**); then use **Wake** or **Resend**.
    Double-click a Mac to open it in Jamf Pro.
 

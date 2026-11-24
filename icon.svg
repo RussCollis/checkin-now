@@ -1,18 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2F6BFF"/>
-      <stop offset="1" stop-color="#1636A8"/>
-    </linearGradient>
-    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFE35A"/>
-      <stop offset="1" stop-color="#FFB300"/>
+      <stop offset="0" stop-color="#3B74F0"/>
+      <stop offset="1" stop-color="#1A3F9E"/>
     </linearGradient>
   </defs>
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
-  <!-- laptop -->
-  <rect x="232" y="300" width="560" height="360" rx="36" fill="none" stroke="#FFFFFF" stroke-width="44"/>
-  <path d="M168 720 H856 L812 780 H212 Z" fill="#FFFFFF"/>
-  <!-- bolt -->
-  <path d="M560 232 L380 520 H500 L452 760 L660 444 H536 L600 232 Z" fill="url(#bolt)" stroke="#1636A8" stroke-width="28" stroke-linejoin="round"/>
+  <!-- macOS icon grid: 824 px rounded square, 100 px transparent margin (same as Patching Dashboard) -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <g transform="translate(512 512) scale(0.8) translate(-512 -512)">
+    <!-- Laptop: white screen with navy list rows, as in Patching Dashboard, and a white base -->
+    <rect x="212" y="250" width="600" height="400" rx="40" fill="#FFFFFF"/>
+    <circle cx="292" cy="340" r="30" fill="#1A3F9E"/>
+    <rect x="342" y="324" width="150" height="32" rx="16" fill="#1A3F9E" opacity="0.85"/>
+    <circle cx="292" cy="560" r="30" fill="#1A3F9E"/>
+    <rect x="342" y="544" width="110" height="32" rx="16" fill="#1A3F9E" opacity="0.85"/>
+    <path d="M150 700 H874 L834 770 H190 Z" fill="#FFFFFF"/>
+    <!-- Check-in bolt in the Patching Dashboard orange -->
+    <path d="M616 200 L470 470 H566 L530 700 L712 418 H612 L664 200 Z" fill="#FFA41B" stroke="#1A3F9E" stroke-width="26" stroke-linejoin="round"/>
+  </g>
 </svg>

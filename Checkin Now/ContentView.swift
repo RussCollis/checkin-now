@@ -1,55 +1,50 @@
 import SwiftUI
 
-enum ResultsTab: Hashable {
+enum ResultsTab: Hashable, CaseIterable {
     case targets, run, activity
+
+    var title: String {
+        switch self {
+        case .targets: "Targets"
+        case .run: "Last Run"
+        case .activity: "Activity"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .targets: "desktopcomputer"
+        case .run: "bolt.fill"
+        case .activity: "list.bullet.rectangle"
+        }
+    }
 }
 
+/// The main window, laid out like Patching Dashboard: navy sidebar, white top
+/// bar with breadcrumb and instance badge, then the controls beside the results.
 struct ContentView: View {
     @Environment(AppModel.self) private var model
     @State private var tab: ResultsTab = .targets
 
     var body: some View {
-        NavigationSplitView {
-            Sidebar()
-                .navigationSplitViewColumnWidth(min: 300, ideal: 420, max: 700)
-        } detail: {
-            ResultsPanel(tab: tab)
-                // Keep the detail's minimum small so the sidebar can be dragged wider.
-                .frame(minWidth: 420)
-        }
-        .navigationTitle("Checkin Now")
-        .navigationSubtitle(model.serverHost ?? "Not connected")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $tab) {
-                    Text("Targets").tag(ResultsTab.targets)
-                    Text("Last Run").tag(ResultsTab.run)
-                    Text("Activity").tag(ResultsTab.activity)
+        HStack(spacing: 0) {
+            NavSidebar(tab: $tab)
+
+            VStack(spacing: 0) {
+                TopBar(tab: tab)
+                HStack(alignment: .top, spacing: 20) {
+                    ControlColumn()
+                        .frame(width: 330)
+                    ResultsPanel(tab: tab)
+                        .frame(minWidth: 480)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task {
-                        await model.loadLists()
-                        await model.refreshRun()
-                    }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .help("Reload groups, policies and run status from Jamf Pro")
-                .disabled(!model.isConfigured || model.isLoadingLists)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                SettingsLink {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .help("Jamf Pro connection and agent setup")
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Theme.content)
             }
         }
-        .frame(minWidth: 760, minHeight: 720)
+        .ignoresSafeArea(.container, edges: .top)
+        .frame(minWidth: 1100, minHeight: 720)
         .task(id: model.isConfigured) { await model.loadLists() }
         // Keep the tables current between runs; during a run the monitor refreshes faster.
         .task {
@@ -70,93 +65,290 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Sidebar
+// MARK: - Navy sidebar
 
-private struct Sidebar: View {
+/// Navy navigation column: brand at the top, the result pages, Settings and credits at the bottom.
+private struct NavSidebar: View {
+    @Environment(AppModel.self) private var model
+    @Binding var tab: ResultsTab
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 30, height: 30)
+                Text("Checkin Now")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 34)
+            .padding(.bottom, 12)
+
+            // A plain stack, not a List: three fixed rows don't need an outline view.
+            VStack(alignment: .leading, spacing: 2) {
+                heading("Check-ins")
+                    .padding(.horizontal, 10)
+                    .padding(.top, 8)
+                    .padding(.bottom, 6)
+                ForEach(ResultsTab.allCases, id: \.self) { item in
+                    row(item)
+                }
+            }
+            .padding(.horizontal, 12)
+
+            Spacer(minLength: 0)
+
+            SettingsLink {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape")
+                    Text("Settings")
+                    Spacer()
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Jamf Pro connection and agent setup")
+            .padding(.horizontal, 12)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Checkin Now \(Bundle.main.shortVersion)")
+                Text(Credits.copyright)
+                Text(Credits.upstream)
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.sidebarDimText)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 22)
+            .padding(.top, 6)
+            .padding(.bottom, 14)
+        }
+        .frame(width: 220)
+        .background(Theme.sidebar)
+        // Keeps system list text and the scroll indicator light on navy.
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func heading(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.system(size: 11, weight: .semibold))
+            .kerning(0.6)
+            .foregroundStyle(Theme.sidebarHeading)
+    }
+
+    private func count(for item: ResultsTab) -> String? {
+        switch item {
+        case .targets:
+            return model.hasPreview ? "\(model.preview.count)" : nil
+        case .run:
+            return model.run.map { "\($0.doneCount)/\($0.macs.count)" }
+        case .activity:
+            let issues = model.log.filter { $0.level == .warning || $0.level == .error }.count
+            return issues > 0 ? "\(issues) issue\(issues == 1 ? "" : "s")" : (model.log.isEmpty ? nil : "\(model.log.count)")
+        }
+    }
+
+    private func row(_ item: ResultsTab) -> some View {
+        let selected = tab == item
+        return HStack(spacing: 8) {
+            Image(systemName: item.symbol)
+                .frame(width: 18)
+                .foregroundStyle(selected ? Theme.sidebarText : Theme.sidebarHeading)
+            Text(item.title)
+                .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                .foregroundStyle(Theme.sidebarText)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if let count = count(for: item) {
+                Text(count)
+                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Theme.sidebarText : Theme.sidebarText.opacity(0.75))
+                    .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6)
+            .fill(selected ? Theme.sidebarSelected : Color.clear))
+        .contentShape(Rectangle())
+        .onTapGesture { tab = item }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+// MARK: - Top bar
+
+/// White bar across the content area: breadcrumb, refresh and the Jamf Pro instance badge.
+private struct TopBar: View {
+    @Environment(AppModel.self) private var model
+    let tab: ResultsTab
+
+    var body: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 6) {
+                Text("Checkin Now").foregroundStyle(.secondary)
+                Text("/").foregroundStyle(.tertiary)
+                Text(tab.title).fontWeight(.semibold)
+            }
+            .font(.system(size: 13))
+            .lineLimit(1)
+
+            Spacer(minLength: 12)
+
+            Button {
+                Task {
+                    await model.loadLists()
+                    await model.refreshRun()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    if model.isLoadingLists {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text("Refresh")
+                }
+            }
+            .buttonStyle(.panel)
+            .help("Reload groups, policies and run status from Jamf Pro")
+            .disabled(!model.isConfigured || model.isLoadingLists)
+
+            // The Jamf Pro server; opens Settings.
+            SettingsLink {
+                let connected = model.isConfigured
+                let tint = !connected ? Theme.grey : (model.groups.isEmpty && !model.isLoadingLists ? Theme.orange : Theme.green)
+                HStack(spacing: 6) {
+                    Circle().fill(tint).frame(width: 7, height: 7)
+                    Text(model.serverHost ?? "Not connected")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(connected ? Theme.navy : Theme.grey)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background((connected ? Theme.blue : Theme.grey).opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help(model.isConfigured ? "Jamf Pro connection settings" : "Connect to Jamf Pro")
+            .accessibilityLabel(model.serverHost.map { "Jamf Pro server \($0)" } ?? "Not connected to Jamf Pro")
+        }
+        .padding(.horizontal, 24)
+        .frame(height: 54)
+        .background(Theme.panel)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 1) }
+    }
+}
+
+// MARK: - Controls
+
+/// Target, policy, progress and recent activity panels, with the run buttons pinned below.
+private struct ControlColumn: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
 
-        Form {
-            if !model.isConfigured {
-                Section {
-                    Label("Connect to Jamf Pro to get started.", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    SettingsLink { Text("Open Settings…") }
-                }
-            }
-
-            Section("Target") {
-                Picker("Target", selection: $model.targetKind) {
-                    Text("Serial Numbers").tag(TargetKind.serials)
-                    Text("Group").tag(TargetKind.group)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: .infinity)
-
-                switch model.targetKind {
-                case .serials:
-                    TextEditor(text: $model.serialsText)
-                        .font(.body.monospaced())
-                        .frame(minHeight: 140)
-                        .scrollContentBackground(.hidden)
-                        .accessibilityLabel("Serial numbers")
-                    HStack {
-                        Text(model.serials.isEmpty
-                             ? "One per line, or comma separated"
-                             : "\(model.serials.count) serial number\(model.serials.count == 1 ? "" : "s")")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        if model.isLoadingPreview { ProgressView().controlSize(.small) }
-                        Button("Look Up") {
-                            Task { await model.loadPreview() }
-                        }
-                        .disabled(model.serials.isEmpty || !model.isConfigured || model.isLoadingPreview)
-                    }
-                case .group:
-                    Picker("Group", selection: $model.selectedGroupID) {
-                        Text("Choose…").tag(Int?.none)
-                        ForEach(model.groups) { group in
-                            Text(group.isSmart ? "\(group.name) (Smart)" : group.name)
-                                .tag(Optional(group.id))
+        VStack(spacing: 16) {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if !model.isConfigured {
+                        Panel {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Label("Connect to Jamf Pro to get started.", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(Theme.orange)
+                                SettingsLink { Text("Open Settings…") }
+                                    .buttonStyle(.panelPrimary)
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    if model.isLoadingPreview {
-                        HStack {
-                            ProgressView().controlSize(.small)
-                            Text("Loading members…").foregroundStyle(.secondary)
+
+                    Panel("Target", accessory: {
+                        Picker("Target", selection: $model.targetKind) {
+                            Text("Serials").tag(TargetKind.serials)
+                            Text("Group").tag(TargetKind.group)
                         }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            switch model.targetKind {
+                            case .serials:
+                                TextEditor(text: $model.serialsText)
+                                    .font(.system(size: 13, design: .monospaced))
+                                    .scrollContentBackground(.hidden)
+                                    .padding(6)
+                                    .frame(minHeight: 120)
+                                    .background(Theme.panelBar, in: RoundedRectangle(cornerRadius: 6))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border))
+                                    .accessibilityLabel("Serial numbers")
+                                HStack {
+                                    Text(model.serials.isEmpty
+                                         ? "One per line, or comma separated"
+                                         : "\(model.serials.count) serial number\(model.serials.count == 1 ? "" : "s")")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    if model.isLoadingPreview { ProgressView().controlSize(.small) }
+                                    Button("Look Up") {
+                                        Task { await model.loadPreview() }
+                                    }
+                                    .buttonStyle(.panel)
+                                    .disabled(model.serials.isEmpty || !model.isConfigured || model.isLoadingPreview)
+                                }
+                            case .group:
+                                Picker("Group", selection: $model.selectedGroupID) {
+                                    Text("Choose…").tag(Int?.none)
+                                    ForEach(model.groups) { group in
+                                        Text(group.isSmart ? "\(group.name) (Smart)" : group.name)
+                                            .tag(Optional(group.id))
+                                    }
+                                }
+                                if model.isLoadingPreview {
+                                    HStack {
+                                        ProgressView().controlSize(.small)
+                                        Text("Loading members…").foregroundStyle(.secondary)
+                                    }
+                                    .font(.system(size: 12))
+                                }
+                            }
+                        }
+                        .padding(16)
                     }
+                    .task(id: model.selectedGroupID) {
+                        if model.targetKind == .group { await model.loadPreview() }
+                    }
+
+                    Panel("Policy", footer: "Used by Run Policy. Check-in and inventory don't need a policy.") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Picker("Policy", selection: $model.selectedPolicyID) {
+                                Text("Choose…").tag(Int?.none)
+                                ForEach(model.policies) { policy in
+                                    Text("\(policy.name) (\(policy.id))").tag(Optional(policy.id))
+                                }
+                            }
+                            .labelsHidden()
+                            Toggle("Update inventory after policy", isOn: $model.policyUpdatesInventory)
+                        }
+                        .font(.system(size: 13))
+                        .padding(16)
+                    }
+
+                    SidebarMacsSection()
+                    SidebarActivitySection()
                 }
             }
-            .task(id: model.selectedGroupID) {
-                if model.targetKind == .group { await model.loadPreview() }
-            }
+            .scrollIndicators(.never)
 
-            Section {
-                Picker("Policy", selection: $model.selectedPolicyID) {
-                    Text("Choose…").tag(Int?.none)
-                    ForEach(model.policies) { policy in
-                        Text("\(policy.name) (\(policy.id))").tag(Optional(policy.id))
-                    }
-                }
-                Toggle("Update inventory after policy", isOn: $model.policyUpdatesInventory)
-            } header: {
-                Text("Policy")
-            } footer: {
-                Text("Used by Run Policy. Check-in and inventory don't need a policy.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            SidebarMacsSection()
-            SidebarActivitySection()
-        }
-        .formStyle(.grouped)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
             ActionPanel()
         }
     }
@@ -177,66 +369,78 @@ private struct SidebarMacsSection: View {
         matchingRun?.macs ?? model.preview
     }
 
+    private var waitingFooter: String? {
+        guard let run = matchingRun, !run.waitingMacs.isEmpty, !run.isComplete else { return nil }
+        return "Waiting Macs are checked automatically after 2 minutes."
+    }
+
     var body: some View {
         if !macs.isEmpty {
-            Section {
-                ForEach(macs.prefix(limit)) { mac in
-                    SidebarMacRow(mac: mac, run: matchingRun,
-                                  diagnosis: matchingRun?.waitingMacs.contains(where: { $0.id == mac.id }) == true ? model.diagnoses[mac.id] : nil)
-                }
-                if macs.count > limit {
-                    Text("+ \(macs.count - limit) more on the Targets tab")
-                        .font(.caption)
+            Panel(matchingRun == nil ? "Macs" : "Progress", footer: waitingFooter, accessory: {
+                if let run = matchingRun {
+                    Text("\(run.doneCount)/\(run.macs.count) done")
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
+            }) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(macs.prefix(limit)) { mac in
+                        SidebarMacRow(mac: mac, run: matchingRun,
+                                      diagnosis: matchingRun?.waitingMacs.contains(where: { $0.id == mac.id }) == true ? model.diagnoses[mac.id] : nil)
+                    }
+                    if macs.count > limit {
+                        Text("+ \(macs.count - limit) more on the Targets page")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
 
-                if let run = matchingRun, !run.waitingMacs.isEmpty, !run.isComplete {
-                    HStack {
-                        Button {
-                            Task { await model.diagnoseWaitingMacs() }
-                        } label: {
-                            Label(model.isDiagnosing ? "Checking…" : "Diagnose", systemImage: "stethoscope")
-                                .frame(maxWidth: .infinity)
+                    if let run = matchingRun, !run.waitingMacs.isEmpty, !run.isComplete {
+                        HStack(spacing: 8) {
+                            Button {
+                                Task { await model.diagnoseWaitingMacs() }
+                            } label: {
+                                WaitingButtonLabel(title: model.isDiagnosing ? "Checking…" : "Diagnose", symbol: "stethoscope")
+                            }
+                            .help("Check each waiting Mac's Jamf Pro history to see why it hasn't finished")
+                            .disabled(model.isDiagnosing)
+                            Button {
+                                Task { await model.wakeWaitingMacs() }
+                            } label: {
+                                WaitingButtonLabel(title: "Wake", symbol: "bell.badge")
+                            }
+                            .help("Send an MDM blank push so waiting Macs pick up the trigger")
+                            .disabled(model.isNudging || model.isRunning)
+                            Button {
+                                Task { await model.resendToWaitingMacs() }
+                            } label: {
+                                WaitingButtonLabel(title: "Resend", symbol: "arrow.clockwise")
+                            }
+                            .help("Send the trigger again to only the waiting Macs")
+                            .disabled(model.isNudging || model.isRunning)
                         }
-                        .help("Check each waiting Mac's Jamf Pro history to see why it hasn't finished")
-                        .disabled(model.isDiagnosing)
-                        Button {
-                            Task { await model.wakeWaitingMacs() }
-                        } label: {
-                            Label("Wake", systemImage: "bell.badge")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .help("Send an MDM blank push so waiting Macs pick up the trigger")
-                        .disabled(model.isNudging || model.isRunning)
-                        Button {
-                            Task { await model.resendToWaitingMacs() }
-                        } label: {
-                            Label("Resend", systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .help("Send the trigger again to only the waiting Macs")
-                        .disabled(model.isNudging || model.isRunning)
-                    }
-                    .labelStyle(.titleAndIcon)
-                    .controlSize(.large)
-                }
-            } header: {
-                HStack {
-                    Text(matchingRun == nil ? "Macs" : "Progress")
-                    Spacer()
-                    if let run = matchingRun {
-                        Text("\(run.doneCount)/\(run.macs.count) done")
-                            .monospacedDigit()
+                        .buttonStyle(TallPanelButtonStyle())
+                        .padding(.top, 4)
                     }
                 }
-            } footer: {
-                if let run = matchingRun, !run.waitingMacs.isEmpty, !run.isComplete {
-                    Text("Waiting Macs are checked automatically after 2 minutes.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .padding(16)
             }
         }
+    }
+}
+
+/// Icon above the title, so three buttons fit across the narrow Progress panel.
+private struct WaitingButtonLabel: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Image(systemName: symbol)
+            Text(title).font(.system(size: 12))
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -253,6 +457,7 @@ private struct SidebarMacRow: View {
                         .fill(color(now: context.date))
                         .frame(width: 8, height: 8)
                     Text(mac.name)
+                        .font(.system(size: 13))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
@@ -266,7 +471,7 @@ private struct SidebarMacRow: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Label(diagnosis.summary, systemImage: diagnosis.symbol)
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(diagnosis.isSevere ? .red : .orange)
+                            .foregroundStyle(diagnosis.isSevere ? Theme.red : Theme.orange)
                         Text(diagnosis.advice)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -288,14 +493,14 @@ private struct SidebarMacRow: View {
 
     private func color(now: Date) -> Color {
         if let run {
-            if run.isDone(mac) { return .green }
-            return run.state(of: mac) == .checkedIn ? .blue : .orange
+            if run.isDone(mac) { return Theme.green }
+            return run.state(of: mac) == .checkedIn ? Theme.blue : Theme.updateOrange
         }
-        guard let contact = mac.lastSeen else { return .red }
+        guard let contact = mac.lastSeen else { return Theme.red }
         switch now.timeIntervalSince(contact) {
-        case ..<3_600: return .green
-        case ..<86_400: return .orange
-        default: return .red
+        case ..<3_600: return Theme.green
+        case ..<86_400: return Theme.updateOrange
+        default: return Theme.red
         }
     }
 
@@ -319,68 +524,56 @@ private struct SidebarActivitySection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Section("Recent Activity") {
-            if model.log.isEmpty {
-                Text("Lookups, check-ins and errors appear here.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(model.log.suffix(5).reversed()) { entry in
-                    LogRow(entry: entry)
-                        .font(.caption)
-                        .lineLimit(2)
+        Panel("Recent Activity") {
+            VStack(alignment: .leading, spacing: 8) {
+                if model.log.isEmpty {
+                    Text("Lookups, check-ins and errors appear here.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.log.suffix(5).reversed()) { entry in
+                        LogRow(entry: entry)
+                            .font(.system(size: 12))
+                            .lineLimit(2)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
         }
     }
 }
 
-/// Large one-click action buttons pinned to the bottom of the sidebar.
+/// Large one-click action buttons pinned below the control panels.
 private struct ActionPanel: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Text("Run on")
-                    .foregroundStyle(.secondary)
-                Text(targetCount)
-                    .fontWeight(.semibold)
-                Spacer()
+        Panel("Run on", detail: targetCount) {
+            VStack(spacing: 10) {
+                ActionButton(
+                    action: .checkinAndInventory,
+                    title: "Check In + Update Inventory",
+                    detail: "jamf policy, then jamf recon",
+                    symbol: "bolt.fill",
+                    prominent: true
+                )
+                .keyboardShortcut(.return, modifiers: .command)
+
+                HStack(spacing: 10) {
+                    ActionButton(action: .checkin, title: "Check In", detail: "jamf policy", symbol: "arrow.triangle.2.circlepath", stacked: true)
+                    ActionButton(action: .inventory, title: "Update Inventory", detail: "jamf recon", symbol: "list.clipboard", stacked: true)
+                }
+
+                ActionButton(
+                    action: .policy(updateInventory: model.policyUpdatesInventory),
+                    title: "Run Policy",
+                    detail: policyDetail,
+                    symbol: "shippingbox"
+                )
             }
-            .font(.callout)
-
-            ActionButton(
-                action: .checkinAndInventory,
-                title: "Check In + Update Inventory",
-                detail: "jamf policy, then jamf recon",
-                symbol: "bolt.fill",
-                prominent: true
-            )
-            .keyboardShortcut(.return, modifiers: .command)
-
-            HStack(spacing: 10) {
-                ActionButton(action: .checkin, title: "Check In", detail: "jamf policy", symbol: "arrow.triangle.2.circlepath", stacked: true)
-                ActionButton(action: .inventory, title: "Update Inventory", detail: "jamf recon", symbol: "list.clipboard", stacked: true)
-            }
-
-            ActionButton(
-                action: .policy(updateInventory: model.policyUpdatesInventory),
-                title: "Run Policy",
-                detail: policyDetail,
-                symbol: "shippingbox"
-            )
-
-            VStack(spacing: 2) {
-                Text("Checkin Now \(Bundle.main.shortVersion) · \(Credits.copyright)")
-                Text(Credits.upstream)
-                    .multilineTextAlignment(.center)
-            }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .padding(16)
         }
-        .padding(16)
-        .background(.bar)
     }
 
     private var policyDetail: String {
@@ -459,30 +652,30 @@ private struct ActionButton: View {
                         .lineLimit(1)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 6)
                     .frame(maxWidth: .infinity, minHeight: prominent ? 56 : 46)
                 }
             }
             .contentShape(Rectangle())
         }
-        .modifier(ProminentIf(prominent))
-        .controlSize(.large)
+        .buttonStyle(TallPanelButtonStyle(prominent: prominent))
         .disabled(!model.canRun(action))
         .help("\(title): \(detail)")
     }
 }
 
-/// Bordered-prominent for the main action, bordered for the rest.
-private struct ProminentIf: ViewModifier {
-    let isOn: Bool
-    init(_ isOn: Bool) { self.isOn = isOn }
+/// `PanelButtonStyle` colours without its fixed 30 pt height, for buttons with two lines.
+private struct TallPanelButtonStyle: ButtonStyle {
+    var prominent = false
+    @Environment(\.isEnabled) private var isEnabled
 
-    func body(content: Content) -> some View {
-        if isOn {
-            content.buttonStyle(.borderedProminent)
-        } else {
-            content.buttonStyle(.bordered)
-        }
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(prominent ? Color.white : Color.primary)
+            .padding(.horizontal, 10)
+            .background(RoundedRectangle(cornerRadius: 6).fill(prominent ? Theme.primary : Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(prominent ? Color.clear : Theme.border, lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.75 : (isEnabled ? 1 : 0.45))
+            .contentShape(Rectangle())
     }
 }
 
@@ -517,9 +710,9 @@ struct LogRow: View {
     private var color: Color {
         switch entry.level {
         case .info: .secondary
-        case .success: .green
-        case .warning: .orange
-        case .error: .red
+        case .success: Theme.green
+        case .warning: Theme.orange
+        case .error: Theme.red
         }
     }
 }

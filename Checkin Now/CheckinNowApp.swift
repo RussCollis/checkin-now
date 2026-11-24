@@ -15,6 +15,7 @@ enum Credits {
             ContentView()
                 .environment(model)
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .appInfo) {

@@ -9,13 +9,21 @@ struct ResultsPanel: View {
     var body: some View {
         Group {
             if !model.isConfigured {
-                ContentUnavailableView {
-                    Label("Connect to Jamf Pro", systemImage: "network")
-                } description: {
-                    Text("Add your server, credentials and org name in Settings.")
-                } actions: {
-                    SettingsLink { Text("Open Settings…") }
-                        .buttonStyle(.borderedProminent)
+                VStack(alignment: .leading, spacing: 16) {
+                    PageHeader(title: tab.title, subtitle: "Not connected to Jamf Pro") { EmptyView() }
+                    Panel {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Connect Jamf Pro to force check-ins.")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Add your server, credentials and org name in Settings.")
+                                .font(.system(size: 13)).foregroundStyle(.secondary)
+                            SettingsLink { Text("Set Up Jamf Pro…") }
+                                .buttonStyle(.panelPrimary)
+                        }
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Spacer(minLength: 0)
                 }
             } else {
                 switch tab {
@@ -25,43 +33,51 @@ struct ResultsPanel: View {
                     if let run = model.run {
                         RunView(run: run)
                     } else {
-                        ContentUnavailableView(
-                            "No Check-ins Yet",
-                            systemImage: "bolt.horizontal.circle",
-                            description: Text("Choose a target and click Check In Now. Each Mac's progress appears here.")
-                        )
+                        EmptyPage(title: "Last Run", subtitle: "Each Mac's progress through the latest check-in",
+                                  message: "No check-ins yet",
+                                  detail: "Choose a target and click Check In. Each Mac's progress appears here.",
+                                  symbol: "bolt.horizontal.circle")
                     }
                 case .activity:
                     ActivityView()
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
-/// Title strip shown above each table.
-private struct PanelHeader<Trailing: View>: View {
+/// Page header over an empty panel, for pages with nothing to show yet.
+private struct EmptyPage: View {
     let title: String
     let subtitle: String
-    @ViewBuilder var trailing: Trailing
+    let message: String
+    let detail: String
+    let symbol: String
+    var isLoading = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.title3.bold())
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 16) {
+            PageHeader(title: title, subtitle: subtitle) { EmptyView() }
+            Panel {
+                VStack(spacing: 10) {
+                    if isLoading {
+                        ProgressView().controlSize(.large)
+                    } else {
+                        Image(systemName: symbol)
+                            .font(.system(size: 34))
+                            .foregroundStyle(Theme.navy)
+                    }
+                    Text(message).font(.system(size: 15, weight: .semibold))
+                    Text(detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(32)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            Spacer()
-            trailing
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
     }
 }
 
@@ -70,37 +86,35 @@ private struct TargetsView: View {
 
     var body: some View {
         if model.hasPreview {
-            VStack(spacing: 0) {
-                PanelHeader(title: title, subtitle: subtitle) {
-                    EmptyView()
+            VStack(alignment: .leading, spacing: 16) {
+                PageHeader(title: title, subtitle: subtitle) { EmptyView() }
+                ChipRow {
+                    StatChip(symbol: "desktopcomputer", count: model.preview.count, label: "Macs", tint: Theme.blue)
+                    StatChip(symbol: "checkmark.circle.fill", count: count(where: { $0.lastSeen.map(isRecent) ?? false }),
+                             label: "seen < 1 h", tint: Theme.green)
+                    StatChip(symbol: "list.clipboard", count: count(where: { $0.lastReport.map(Calendar.current.isDateInToday) ?? false }),
+                             label: "inventory today", tint: Theme.navy)
+                    StatChip(symbol: "exclamationmark.triangle.fill", count: count(where: { mac in mac.lastSeen.map { $0 < Date().addingTimeInterval(-86_400) } ?? true }),
+                             label: "not seen 24 h+", tint: Theme.orange)
                 }
-                HStack(spacing: 10) {
-                    StatCard(title: "Macs", value: model.preview.count, symbol: "desktopcomputer", tint: .accentColor)
-                    StatCard(title: "Seen < 1 h", value: count(where: { $0.lastSeen.map(isRecent) ?? false }),
-                             symbol: "checkmark.circle", tint: .green)
-                    StatCard(title: "Inventory today", value: count(where: { $0.lastReport.map(Calendar.current.isDateInToday) ?? false }),
-                             symbol: "list.clipboard", tint: .blue)
-                    StatCard(title: "Not seen 24 h+", value: count(where: { mac in mac.lastSeen.map { $0 < Date().addingTimeInterval(-86_400) } ?? true }),
-                             symbol: "exclamationmark.triangle", tint: .orange)
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
                 if !model.previewNotFound.isEmpty {
                     NotFoundBanner(serials: model.previewNotFound)
                 }
-                Divider()
-                MacTable(macs: model.preview, run: nil)
+                Panel("Macs", detail: "(\(model.preview.count))", footer: "Double-click a Mac to open it in Jamf Pro") {
+                    MacTable(macs: model.preview, run: nil)
+                }
             }
         } else if model.isLoadingPreview {
-            ProgressView(model.targetKind == .group ? "Loading group members…" : "Looking up serial numbers…")
+            EmptyPage(title: "Targets", subtitle: "The Macs the next check-in goes to",
+                      message: model.targetKind == .group ? "Loading group members…" : "Looking up serial numbers…",
+                      detail: "Reading inventory from Jamf Pro.", symbol: "desktopcomputer", isLoading: true)
         } else {
-            ContentUnavailableView(
-                "No Targets",
-                systemImage: "desktopcomputer",
-                description: Text(model.targetKind == .group
-                                  ? "Choose a computer group to list its members."
-                                  : "Enter serial numbers and click Look Up.")
-            )
+            EmptyPage(title: "Targets", subtitle: "The Macs the next check-in goes to",
+                      message: "No targets",
+                      detail: model.targetKind == .group
+                          ? "Choose a computer group to list its members."
+                          : "Enter serial numbers and click Look Up.",
+                      symbol: "desktopcomputer")
         }
     }
 
@@ -134,53 +148,59 @@ private struct RunView: View {
     let run: CheckinRun
 
     var body: some View {
-        VStack(spacing: 0) {
-            PanelHeader(
+        VStack(alignment: .leading, spacing: 16) {
+            PageHeader(
                 title: run.action,
                 subtitle: "\(run.targetDescription) · sent \(run.triggeredAt.formatted(date: .omitted, time: .standard))"
             ) {
                 if model.isMonitoring {
                     ProgressView().controlSize(.small)
-                    Text("Watching…").foregroundStyle(.secondary)
+                    Text("Watching…").font(.system(size: 13)).foregroundStyle(.secondary)
                     Button("Stop") { model.stopMonitoring() }
+                        .buttonStyle(.panel)
                 } else if let refreshed = run.lastRefreshed {
                     Text("Updated \(refreshed.formatted(date: .omitted, time: .standard))")
-                        .font(.callout)
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
             }
 
             if !run.macs.isEmpty {
-                VStack(spacing: 10) {
-                    HStack(spacing: 10) {
-                        StatCard(title: "Targeted", value: run.macs.count, symbol: "desktopcomputer", tint: .accentColor)
-                        if run.expectsCheckin {
-                            StatCard(title: "Checked in", value: run.checkedInCount, symbol: "arrow.triangle.2.circlepath", tint: .blue)
-                        }
-                        if run.expectsInventory {
-                            StatCard(title: "Inventory updated", value: run.inventoryCount, symbol: "list.clipboard", tint: .green)
-                        }
-                        StatCard(title: "Waiting", value: run.waitingMacs.count, symbol: "clock", tint: .orange)
+                ChipRow {
+                    StatChip(symbol: "desktopcomputer", count: run.macs.count, label: "targeted", tint: Theme.blue)
+                    if run.expectsCheckin {
+                        StatChip(symbol: "arrow.triangle.2.circlepath", count: run.checkedInCount, label: "checked in", tint: Theme.navy)
                     }
-                    ProgressView(value: Double(run.doneCount) + Double(run.updatingInventoryCount) * 0.5, total: Double(run.macs.count)) {
-                        EmptyView()
-                    } currentValueLabel: {
-                        Text(run.updatingInventoryCount > 0
-                             ? "\(run.doneCount) of \(run.macs.count) done · \(run.updatingInventoryCount) updating inventory"
-                             : "\(run.doneCount) of \(run.macs.count) done")
+                    if run.expectsInventory {
+                        StatChip(symbol: "list.clipboard", count: run.inventoryCount, label: "inventory updated", tint: Theme.green)
                     }
-                    .tint(run.isComplete ? .green : .accentColor)
+                    StatChip(symbol: "clock", count: run.waitingMacs.count, label: "waiting", tint: Theme.orange)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
             }
 
             if !run.notFound.isEmpty {
                 NotFoundBanner(serials: run.notFound)
             }
-            Divider()
-            MacTable(macs: run.macs, run: run)
+
+            Panel("Macs", detail: "(\(run.macs.count))", footer: footer) {
+                VStack(spacing: 0) {
+                    if !run.macs.isEmpty {
+                        ProgressView(value: Double(run.doneCount) + Double(run.updatingInventoryCount) * 0.5, total: Double(run.macs.count))
+                            .tint(run.isComplete ? Theme.green : Theme.primary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                        Divider().overlay(Theme.border)
+                    }
+                    MacTable(macs: run.macs, run: run)
+                }
+            }
         }
+    }
+
+    private var footer: String {
+        run.updatingInventoryCount > 0
+            ? "\(run.doneCount) of \(run.macs.count) done · \(run.updatingInventoryCount) updating inventory"
+            : "\(run.doneCount) of \(run.macs.count) done"
     }
 }
 
@@ -209,35 +229,44 @@ private struct ActivityView: View {
 
     var body: some View {
         if model.log.isEmpty {
-            ContentUnavailableView("No Activity", systemImage: "list.bullet.rectangle",
-                                   description: Text("Lookups, check-ins and errors from the last 24 hours appear here."))
+            EmptyPage(title: "Activity", subtitle: "Lookups, check-ins and errors from the last 24 hours",
+                      message: "No activity", detail: "Lookups, check-ins and errors from the last 24 hours appear here.",
+                      symbol: "list.bullet.rectangle")
         } else {
-            VStack(spacing: 0) {
-                PanelHeader(title: "Activity", subtitle: subtitle) {
-                    Picker("Show", selection: $filter) {
-                        Text("All").tag(Filter.all)
-                        Text("Issues").tag(Filter.issues)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    TextField("Search", text: $search)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 160)
+            VStack(alignment: .leading, spacing: 16) {
+                PageHeader(title: "Activity", subtitle: subtitle) {
                     Button("Copy") { copy() }
+                        .buttonStyle(.panel)
                         .help("Copy the shown activity as text")
                     Button("Clear") { model.log.removeAll() }
+                        .buttonStyle(.panelDestructive)
                 }
-                Divider()
-                if entries.isEmpty {
-                    ContentUnavailableView.search(text: search)
-                } else {
-                    List {
-                        ForEach(hours, id: \.start) { hour in
-                            Section(hour.start.formatted(.dateTime.weekday(.wide).hour().minute())) {
-                                ForEach(hour.entries) { LogRow(entry: $0) }
+                Panel("Events", detail: "(\(entries.count))", accessory: {
+                    HStack(spacing: 8) {
+                        TextField("Filter events", text: $search)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 200)
+                        Picker("Show", selection: $filter) {
+                            Text("All").tag(Filter.all)
+                            Text("Issues").tag(Filter.issues)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }) {
+                    if entries.isEmpty {
+                        ContentUnavailableView.search(text: search)
+                            .frame(maxHeight: .infinity)
+                    } else {
+                        List {
+                            ForEach(hours, id: \.start) { hour in
+                                Section(hour.start.formatted(.dateTime.weekday(.wide).hour().minute())) {
+                                    ForEach(hour.entries) { LogRow(entry: $0) }
+                                }
                             }
                         }
+                        .scrollContentBackground(.hidden)
                     }
                 }
             }
@@ -258,34 +287,6 @@ private struct ActivityView: View {
     }
 }
 
-/// Compact metric tile used above the tables.
-private struct StatCard: View {
-    let title: String
-    let value: Int
-    let symbol: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: symbol)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .labelStyle(TintedIconLabelStyle(tint: tint))
-                .lineLimit(1)
-            Text(value, format: .number)
-                .font(.title2.weight(.semibold))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .animation(.default, value: value)
-    }
-}
-
 private struct TintedIconLabelStyle: LabelStyle {
     let tint: Color
 
@@ -302,12 +303,13 @@ private struct NotFoundBanner: View {
 
     var body: some View {
         Label("Not found in Jamf Pro: \(serials.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(.orange)
+            .font(.system(size: 13))
+            .foregroundStyle(Theme.orange)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.orange.opacity(0.1))
+            .padding(.vertical, 10)
+            .background(Theme.updateOrange.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -474,7 +476,7 @@ private struct MacTable: View {
                 TableColumn("Details", value: \.details) { row in
                     if let diagnosis = row.diagnosis {
                         Label(diagnosis.summary, systemImage: diagnosis.symbol)
-                            .modifier(RowTint(diagnosis.isSevere ? .red : .orange))
+                            .modifier(RowTint(diagnosis.isSevere ? Theme.red : Theme.orange))
                             .help(diagnosis.advice)
                     } else {
                         Text("")
@@ -484,7 +486,7 @@ private struct MacTable: View {
             }
         }
         .tableStyle(.inset)
-        .alternatingRowBackgrounds(.enabled)
+        .alternatingRowBackgrounds(.disabled)
         .onAppear(perform: resort)
         .onChange(of: macs.map(\.id)) { resort() }
         .onChange(of: sortColumn) { resort() }
@@ -513,14 +515,14 @@ private struct StatusBadge: View {
     var body: some View {
         if isDone {
             Label("Done", systemImage: "checkmark.circle.fill")
-                .modifier(RowTint(.green))
+                .modifier(RowTint(Theme.green))
         } else if state == .checkedIn {
             Label(updatingInventory ? "Updating Inventory" : "Checked In",
                   systemImage: updatingInventory ? "arrow.triangle.2.circlepath" : "checkmark.circle")
-                .modifier(RowTint(.accentColor))
+                .modifier(RowTint(Theme.blue))
         } else {
             Label("Waiting", systemImage: "clock")
-                .modifier(RowTint(.orange))
+                .modifier(RowTint(Theme.orange))
         }
     }
 }
@@ -569,9 +571,9 @@ private struct DateCell: View {
     /// Green within an hour, orange within a day, red after that.
     private func freshness(of date: Date, now: Date) -> Color {
         switch now.timeIntervalSince(date) {
-        case ..<3_600: .green
-        case ..<86_400: .orange
-        default: .red
+        case ..<3_600: Theme.green
+        case ..<86_400: Theme.updateOrange
+        default: Theme.red
         }
     }
 }
