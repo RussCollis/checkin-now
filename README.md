@@ -4,7 +4,7 @@
 
 A macOS app that forces Jamf Pro–managed Macs to check in immediately, by serial number or computer group, and shows each Mac checking in live.
 
-**Version:** 0.6.6
+**Version:** 0.6.9
 **Owner:** Russell Collis
 
 ## Features

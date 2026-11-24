@@ -311,7 +311,59 @@ private struct NotFoundBanner: View {
     }
 }
 
+/// One table row: a Mac plus the values its columns sort by.
+private struct MacRow: Identifiable {
+    let mac: TargetMac
+    /// Done sorts after checked in, which sorts after waiting.
+    let statusRank: Int
+    let diagnosis: MacDiagnosis?
+
+    var id: TargetMac.ID { mac.id }
+    // Missing values sort as empty strings or the earliest date.
+    var name: String { mac.name }
+    var serial: String { mac.serial }
+    var model: String { mac.model ?? "" }
+    var osVersion: String { mac.osVersion ?? "" }
+    var lastSeen: Date { mac.lastSeen ?? .distantPast }
+    var lastContact: Date { mac.lastContact ?? .distantPast }
+    var lastReport: Date { mac.lastReport ?? .distantPast }
+    var details: String { diagnosis?.summary ?? "" }
+}
+
+/// A sortable column. The chosen column and direction are saved in user
+/// defaults, so every table shares one sort and it's kept between launches.
+private enum MacSortColumn: String, CaseIterable {
+    case status, name, serial, model, osVersion, lastSeen, lastContact, lastReport, details
+
+    /// Status and Details only exist while a run is showing.
+    var needsRun: Bool { self == .status || self == .details }
+
+    /// Must match the comparator each `TableColumn(_:value:)` builds, so the
+    /// header shows the sort arrow. String columns use localized standard order.
+    func comparator(_ order: SortOrder) -> KeyPathComparator<MacRow> {
+        switch self {
+        case .status: KeyPathComparator(\.statusRank, order: order)
+        case .name: KeyPathComparator(\.name, comparator: .localizedStandard, order: order)
+        case .serial: KeyPathComparator(\.serial, comparator: .localizedStandard, order: order)
+        case .model: KeyPathComparator(\.model, comparator: .localizedStandard, order: order)
+        case .osVersion: KeyPathComparator(\.osVersion, comparator: .localizedStandard, order: order)
+        case .lastSeen: KeyPathComparator(\.lastSeen, order: order)
+        case .lastContact: KeyPathComparator(\.lastContact, order: order)
+        case .lastReport: KeyPathComparator(\.lastReport, order: order)
+        case .details: KeyPathComparator(\.details, comparator: .localizedStandard, order: order)
+        }
+    }
+
+    init?(_ comparator: KeyPathComparator<MacRow>) {
+        guard let match = Self.allCases.first(where: { $0.comparator(.forward).keyPath == comparator.keyPath }) else {
+            return nil
+        }
+        self = match
+    }
+}
+
 /// Table of Macs. With a run, the first column shows each Mac's check-in state.
+/// Click a column header to sort A–Z / 0–9; click again for Z–A / 9–0.
 private struct MacTable: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
@@ -319,50 +371,108 @@ private struct MacTable: View {
     let run: CheckinRun?
 
     @State private var selection = Set<TargetMac.ID>()
+    /// Empty until a header is clicked, so the original order shows first.
+    @AppStorage("macTableSortColumn") private var sortColumn = ""
+    @AppStorage("macTableSortAscending") private var sortAscending = true
+    /// Row order, worked out only when the sort or the set of Macs changes, so
+    /// rows don't jump around as Macs check in during a run.
+    @State private var orderedIDs: [TargetMac.ID] = []
+
+    /// The saved sort, ignored when its column isn't in this table.
+    private var activeColumn: MacSortColumn? {
+        guard let column = MacSortColumn(rawValue: sortColumn), run != nil || !column.needsRun else { return nil }
+        return column
+    }
+
+    private var sortOrder: Binding<[KeyPathComparator<MacRow>]> {
+        Binding {
+            activeColumn.map { [$0.comparator(sortAscending ? .forward : .reverse)] } ?? []
+        } set: { newValue in
+            guard let first = newValue.first, let column = MacSortColumn(first) else {
+                sortColumn = ""
+                return
+            }
+            sortColumn = column.rawValue
+            sortAscending = first.order == .forward
+        }
+    }
+
+    /// Rows in their original order, with current data.
+    private var unsortedRows: [MacRow] {
+        let waitingIDs = Set(run?.waitingMacs.map(\.id) ?? [])
+        return macs.map { mac in
+            var rank = 0
+            if let run {
+                rank = run.isDone(mac) ? 3 : run.state(of: mac).rawValue
+            }
+            let diagnosis = waitingIDs.contains(mac.id) ? model.diagnoses[mac.id] : nil
+            return MacRow(mac: mac, statusRank: rank, diagnosis: diagnosis)
+        }
+    }
+
+    /// Current data laid out in the last sorted order. Macs not yet placed go last.
+    private var rows: [MacRow] {
+        let current = unsortedRows
+        let byID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let placed = Set(orderedIDs)
+        return orderedIDs.compactMap { byID[$0] } + current.filter { !placed.contains($0.id) }
+    }
+
+    private func resort() {
+        guard let column = activeColumn else {
+            orderedIDs = macs.map(\.id)
+            return
+        }
+        // Rows with equal values (same status, model, macOS…) fall back to name, then serial.
+        let comparators = [column.comparator(sortAscending ? .forward : .reverse),
+                           MacSortColumn.name.comparator(.forward),
+                           MacSortColumn.serial.comparator(.forward)]
+        orderedIDs = unsortedRows.sorted(using: comparators).map(\.id)
+    }
 
     var body: some View {
-        Table(macs, selection: $selection) {
+        Table(rows, selection: $selection, sortOrder: sortOrder) {
             if let run {
-                TableColumn("Status") { mac in
-                    StatusBadge(state: run.state(of: mac), isDone: run.isDone(mac),
+                TableColumn("Status", value: \.statusRank) { row in
+                    StatusBadge(state: run.state(of: row.mac), isDone: run.isDone(row.mac),
                                 updatingInventory: run.expectsInventory)
                 }
                 .width(min: 70, ideal: 160, max: 190)
             }
-            TableColumn("Name") { mac in
-                Label(mac.name, systemImage: "laptopcomputer")
+            TableColumn("Name", value: \.name) { row in
+                Label(row.mac.name, systemImage: "laptopcomputer")
                     .labelStyle(TintedIconLabelStyle(tint: .secondary))
             }
             .width(min: 90, ideal: 150)
-            TableColumn("Serial") { mac in
-                Text(mac.serial).monospaced()
+            TableColumn("Serial", value: \.serial) { row in
+                Text(row.mac.serial).monospaced()
             }
             .width(min: 70, ideal: 120, max: 150)
-            TableColumn("Model") { mac in
-                Text(mac.model ?? "—")
-                    .help(mac.model ?? "")
+            TableColumn("Model", value: \.model) { row in
+                Text(row.mac.model ?? "—")
+                    .help(row.mac.model ?? "")
             }
             .width(min: 60, ideal: 160)
-            TableColumn("macOS") { mac in
-                Text(mac.osVersion ?? "—")
+            TableColumn("macOS", value: \.osVersion) { row in
+                Text(row.mac.osVersion ?? "—")
             }
             .width(min: 40, ideal: 60, max: 80)
-            TableColumn("Last Seen") { mac in
-                DateCell(date: mac.lastSeen, showsFreshness: true)
+            TableColumn("Last Seen", value: \.lastSeen) { row in
+                DateCell(date: row.mac.lastSeen, showsFreshness: true)
             }
             .width(min: 60, ideal: 115, max: 160)
-            TableColumn("Last Contact") { mac in
+            TableColumn("Last Contact", value: \.lastContact) { row in
                 // Jamf Pro's own "Last Check-in" (last contact time), unadjusted.
-                DateCell(date: mac.lastContact, showsFreshness: false)
+                DateCell(date: row.mac.lastContact, showsFreshness: false)
             }
             .width(min: 60, ideal: 110, max: 160)
-            TableColumn("Last Inventory") { mac in
-                DateCell(date: mac.lastReport, showsFreshness: false)
+            TableColumn("Last Inventory", value: \.lastReport) { row in
+                DateCell(date: row.mac.lastReport, showsFreshness: false)
             }
             .width(min: 60, ideal: 105, max: 160)
-            if let run {
-                TableColumn("Details") { mac in
-                    if run.waitingMacs.contains(where: { $0.id == mac.id }), let diagnosis = model.diagnoses[mac.id] {
+            if run != nil {
+                TableColumn("Details", value: \.details) { row in
+                    if let diagnosis = row.diagnosis {
                         Label(diagnosis.summary, systemImage: diagnosis.symbol)
                             .modifier(RowTint(diagnosis.isSevere ? .red : .orange))
                             .help(diagnosis.advice)
@@ -375,6 +485,10 @@ private struct MacTable: View {
         }
         .tableStyle(.inset)
         .alternatingRowBackgrounds(.enabled)
+        .onAppear(perform: resort)
+        .onChange(of: macs.map(\.id)) { resort() }
+        .onChange(of: sortColumn) { resort() }
+        .onChange(of: sortAscending) { resort() }
         .contextMenu(forSelectionType: TargetMac.ID.self) { ids in
             if let id = ids.first, let url = model.jamfURL(forComputer: id) {
                 Button("Open in Jamf Pro") { openURL(url) }
