@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2F6BFF"/>
+      <stop offset="1" stop-color="#1636A8"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE35A"/>
+      <stop offset="1" stop-color="#FFB300"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <!-- laptop -->
+  <rect x="232" y="300" width="560" height="360" rx="36" fill="none" stroke="#FFFFFF" stroke-width="44"/>
+  <path d="M168 720 H856 L812 780 H212 Z" fill="#FFFFFF"/>
+  <!-- bolt -->
+  <path d="M560 232 L380 520 H500 L452 760 L660 444 H536 L600 232 Z" fill="url(#bolt)" stroke="#1636A8" stroke-width="28" stroke-linejoin="round"/>
+</svg>
