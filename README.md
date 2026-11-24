@@ -4,7 +4,7 @@
 
 A macOS app that forces Jamf Pro–managed Macs to check in immediately, by serial number or computer group, and shows each Mac checking in live.
 
-**Version:** 0.6.4
+**Version:** 0.6.5
 **Owner:** Russell Collis
 
 ## Features
@@ -61,3 +61,6 @@ jamf-checkin-watcher, so existing installs keep working.
 
 ## License
 MIT © 2026 Russell Collis — see [LICENSE](LICENSE).
+
+The agent setup script is derived from [jamf-checkin-watcher](https://github.com/mhrono/jamf-checkin-watcher)
+© 2021 Buoy Health, Inc., licensed under the Apache License 2.0 — see [NOTICE](NOTICE).

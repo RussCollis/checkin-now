@@ -1,0 +1,16 @@
+Checkin Now
+Copyright (c) 2026 Russell Collis
+Licensed under the MIT License (see LICENSE).
+
+This product includes software derived from jamf-checkin-watcher
+(https://github.com/mhrono/jamf-checkin-watcher):
+
+    Copyright 2021 Buoy Health, Inc.
+    Licensed under the Apache License, Version 2.0.
+    http://www.apache.org/licenses/LICENSE-2.0
+
+The Checkin Now agent setup script (Checkin Now/WatcherScript.swift) is based on
+jamf-checkin-watcher's checkInWatcherCreator.sh. Changes: renamed and rebranded;
+added the "recon" key and "none" policy option; removed `-room "none"` from
+`jamf recon`; added logging to /var/log/checkinnow.log; switched to
+launchctl bootout/bootstrap.

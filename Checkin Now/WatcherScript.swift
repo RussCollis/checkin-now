@@ -15,6 +15,7 @@ enum WatcherScript {
         ## Installs the Checkin Now agent: a LaunchDaemon that runs a Jamf Pro
         ## check-in whenever the Checkin Now trigger profile is delivered or updated.
         ## Paths and labels match jamf-checkin-watcher, so existing installs are upgraded in place.
+        ## Derived from jamf-checkin-watcher © 2021 Buoy Health, Inc. (Apache License 2.0).
 
         orgName="\#(orgName)"
 
