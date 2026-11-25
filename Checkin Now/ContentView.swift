@@ -488,7 +488,7 @@ private struct SidebarMacRow: View {
 
     private var helpText: String {
         if let diagnosis { return "\(diagnosis.summary). \(diagnosis.advice)" }
-        return mac.lastSeen.map { "Last seen by Jamf \($0.formatted(date: .abbreviated, time: .standard))" } ?? "Never checked in"
+        return mac.lastSeen.map { "Last check-in \($0.formatted(date: .abbreviated, time: .standard))" } ?? "Never checked in"
     }
 
     private func color(now: Date) -> Color {

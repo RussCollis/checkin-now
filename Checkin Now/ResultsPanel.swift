@@ -91,11 +91,11 @@ private struct TargetsView: View {
                 ChipRow {
                     StatChip(symbol: "desktopcomputer", count: model.preview.count, label: "Macs", tint: Theme.blue)
                     StatChip(symbol: "checkmark.circle.fill", count: count(where: { $0.lastSeen.map(isRecent) ?? false }),
-                             label: "seen < 1 h", tint: Theme.green)
+                             label: "checked in < 1 h", tint: Theme.green)
                     StatChip(symbol: "list.clipboard", count: count(where: { $0.lastReport.map(Calendar.current.isDateInToday) ?? false }),
                              label: "inventory today", tint: Theme.navy)
                     StatChip(symbol: "exclamationmark.triangle.fill", count: count(where: { mac in mac.lastSeen.map { $0 < Date().addingTimeInterval(-86_400) } ?? true }),
-                             label: "not seen 24 h+", tint: Theme.orange)
+                             label: "no check-in 24 h+", tint: Theme.orange)
                 }
                 if !model.previewNotFound.isEmpty {
                     NotFoundBanner(serials: model.previewNotFound)
@@ -459,11 +459,11 @@ private struct MacTable: View {
                 Text(row.mac.osVersion ?? "—")
             }
             .width(min: 40, ideal: 60, max: 80)
-            TableColumn("Last Seen", value: \.lastSeen) { row in
+            TableColumn("Last Check-in", value: \.lastSeen) { row in
                 DateCell(date: row.mac.lastSeen, showsFreshness: true)
             }
             .width(min: 60, ideal: 115, max: 160)
-            TableColumn("Last Contact", value: \.lastContact) { row in
+            TableColumn("Jamf Contact", value: \.lastContact) { row in
                 // Jamf Pro's own "Last Check-in" (last contact time), unadjusted.
                 DateCell(date: row.mac.lastContact, showsFreshness: false)
             }
